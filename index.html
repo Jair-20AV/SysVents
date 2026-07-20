@@ -544,7 +544,8 @@
                     </div>
                     <div class="form-group">
                         <label><i class="fas fa-lock"></i> Contraseña</label>
-                        <input type="password" id="reg-contrasena" required placeholder="Mínimo 4 caracteres">
+                        <input type="password" id="reg-contrasena" required placeholder="Ej: Clave@123">
+                        <small style="color: var(--gray-600); display:block; margin-top:0.35rem;">Mínimo 5 caracteres, con al menos 1 mayúscula, 1 número y 1 carácter especial (@, ., -, etc.)</small>
                     </div>
                     <div class="form-group">
                         <label><i class="fas fa-briefcase"></i> Tipo de Negocio</label>
@@ -1808,6 +1809,7 @@
 
         DB.cargar();
         consolidarDuplicadosExistentes();
+        sembrarInventarioBase();
         DB.guardar();
 
         // ==================== CONVERSIÓN DE UNIDADES ====================
@@ -1850,6 +1852,50 @@
         function nombrePresentable(texto) {
             return String(texto || '').trim().replace(/\s+/g, ' ').replace(/\b\p{L}/gu, l => l.toUpperCase());
         }
+        function sembrarInventarioBase() {
+            const addProduct = (propietario, nombre, tipo, stock, costo, precio) => {
+                const exists = DB.productos.some(p => p.propietario === propietario && normalizarNombre(p.nombre) === normalizarNombre(nombre));
+                if (!exists) {
+                    DB.productos.push({ propietario, nombre, tipo, stock, costo, precio, id: DB.idCounter++, fechaRegistro: new Date().toISOString() });
+                }
+            };
+            const addMP = (propietario, nombre, unidad, stock, costo) => {
+                const exists = DB.materiaPrima.some(m => m.propietario === propietario && normalizarNombre(m.nombre) === normalizarNombre(nombre) && m.unidad === unidad);
+                if (!exists) {
+                    DB.materiaPrima.push({ propietario, nombre, unidad, stock, costo, id: DB.idCounter++, fechaRegistro: new Date().toISOString() });
+                }
+            };
+            const addReceta = (propietario, nombre, rendimiento, unidadSalida, ingredientes) => {
+                const exists = DB.recetas.some(r => r.propietario === propietario && normalizarNombre(r.nombre) === normalizarNombre(nombre));
+                if (!exists) {
+                    DB.recetas.push({ propietario, nombre, rendimiento, unidadSalida, ingredientes, id: DB.idCounter++, fechaRegistro: new Date().toISOString() });
+                }
+            };
+
+            // Revendedor
+            addProduct('rev@tienda.com', 'Arroz 1kg', 'Revendedor', 25, 1.20, 1.75);
+            addProduct('rev@tienda.com', 'Azúcar 1kg', 'Revendedor', 18, 1.10, 1.65);
+
+            // Fabricante
+            addProduct('fab@empresa.com', 'Pan 1kg', 'Fabricado', 40, 2.40, 3.60);
+            addProduct('fab@empresa.com', 'Galleta artesanal', 'Fabricado', 60, 0.55, 1.10);
+
+            // Materia prima fabricante
+            addMP('fab@empresa.com', 'Harina', 'kg', 40, 0.90);
+            addMP('fab@empresa.com', 'Azúcar', 'kg', 20, 1.15);
+            addMP('fab@empresa.com', 'Levadura', 'und', 15, 0.20);
+
+            // Receta fabricante
+            const harina = DB.materiaPrima.find(m => m.propietario === 'fab@empresa.com' && normalizarNombre(m.nombre) === 'harina');
+            const azucar = DB.materiaPrima.find(m => m.propietario === 'fab@empresa.com' && normalizarNombre(m.nombre) === 'azucar');
+            const levadura = DB.materiaPrima.find(m => m.propietario === 'fab@empresa.com' && normalizarNombre(m.nombre) === 'levadura');
+            addReceta('fab@empresa.com', 'Pan básico 1kg', 1, 'kg', [
+                { materiaPrimaId: harina ? harina.id : null, cantidad: 0.60, unidad: 'kg' },
+                { materiaPrimaId: azucar ? azucar.id : null, cantidad: 0.05, unidad: 'kg' },
+                { materiaPrimaId: levadura ? levadura.id : null, cantidad: 1, unidad: 'und' }
+            ].filter(i => i.materiaPrimaId));
+        }
+
         function consolidarDuplicadosExistentes() {
             const consolidar = (lista, usaUnidad) => {
                 const mapa = new Map(), salida = [];
@@ -1987,6 +2033,52 @@
         }
 
         // ==================== LOGIN / REGISTRO ====================
+        // Mínimo 5 caracteres, al menos 1 mayúscula, 1 número y 1 carácter especial
+        const REGEX_CLAVE_SEGURA = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{5,}$/;
+
+        // Crea un inventario de ejemplo distinto según el tipo de negocio del nuevo usuario,
+        // para que la cuenta no empiece completamente vacía.
+        function crearInventarioPredeterminado(correo, rol) {
+            if (rol === 'Revendedor') {
+                const productos = [
+                    { nombre: 'Camiseta talla M', tipo: 'Reventa', stock: 20, costo: 4.00, precio: 9.00 },
+                    { nombre: 'Taza de cerámica', tipo: 'Reventa', stock: 15, costo: 2.00, precio: 5.00 },
+                    { nombre: 'Cuaderno universitario', tipo: 'Reventa', stock: 30, costo: 1.00, precio: 2.50 }
+                ];
+                productos.forEach(p => {
+                    DB.productos.push({ ...p, propietario: correo, id: DB.idCounter++, fechaRegistro: new Date().toISOString() });
+                });
+            } else {
+                const materias = [
+                    { nombre: 'Harina', unidad: 'kg', stock: 25, costo: 1.20 },
+                    { nombre: 'Azúcar', unidad: 'kg', stock: 15, costo: 0.90 },
+                    { nombre: 'Huevos', unidad: 'und', stock: 60, costo: 0.15 },
+                    { nombre: 'Mantequilla', unidad: 'kg', stock: 5, costo: 3.50 }
+                ];
+                const idsMateria = {};
+                materias.forEach(m => {
+                    const item = { ...m, propietario: correo, id: DB.idCounter++ };
+                    DB.materiaPrima.push(item);
+                    idsMateria[m.nombre] = item.id;
+                });
+
+                DB.recetas.push({
+                    nombre: 'Pan casero',
+                    rendimiento: 10,
+                    unidadSalida: 'und',
+                    ingredientes: [
+                        { materiaPrimaId: idsMateria['Harina'], cantidad: 1, unidad: 'kg' },
+                        { materiaPrimaId: idsMateria['Azúcar'], cantidad: 0.1, unidad: 'kg' },
+                        { materiaPrimaId: idsMateria['Huevos'], cantidad: 2, unidad: 'und' },
+                        { materiaPrimaId: idsMateria['Mantequilla'], cantidad: 0.2, unidad: 'kg' }
+                    ],
+                    propietario: correo,
+                    id: DB.idCounter++
+                });
+            }
+            DB.guardar();
+        }
+
         document.getElementById('formLogin').addEventListener('submit', function(e) {
             e.preventDefault();
             const correo = document.getElementById('login-correo').value.trim().toLowerCase();
@@ -2003,8 +2095,17 @@
                 return; 
             }
 
-            const datos = user.split(';');
-            if (pass !== datos[1]) { 
+            let datos = [];
+            if (typeof user === 'string') {
+                datos = user.split(';');
+            } else if (typeof user === 'object' && user !== null) {
+                datos = [user.nombre || '', user.clave || '', user.rol || '', user.negocio || 'Mi Negocio'];
+            } else {
+                alerta('alerta-login', 'Formato de usuario inválido', 'error');
+                return;
+            }
+
+            if ((pass || '') !== String(datos[1] || '').trim()) { 
                 alerta('alerta-login', 'Contraseña incorrecta', 'error'); 
                 return; 
             }
@@ -2032,9 +2133,11 @@
             if (datos[2] === 'Administrador') {
                 mostrarPantalla('pantalla-admin');
             } else if (datos[2] === 'Revendedor') {
+                if (!DB.productos.some(p => p.propietario === correo)) sembrarInventarioBase();
                 document.getElementById('rev-bienvenido').textContent = '¡Bienvenido, ' + datos[0] + '!';
                 mostrarPantalla('pantalla-opciones-revendedor');
             } else {
+                if (!DB.productos.some(p => p.propietario === correo) && !DB.materiaPrima.some(m => m.propietario === correo)) sembrarInventarioBase();
                 document.getElementById('fab-bienvenido').textContent = '¡Bienvenido, ' + datos[0] + '!';
                 mostrarPantalla('pantalla-opciones-fabricante');
             }
@@ -2054,8 +2157,8 @@
                 return; 
             }
 
-            if (pass.length < 4) { 
-                alerta('alerta-registro', 'Contraseña mínimo 4 caracteres', 'error'); 
+            if (!REGEX_CLAVE_SEGURA.test(pass)) { 
+                alerta('alerta-registro', 'La contraseña debe tener mínimo 5 caracteres, incluir 1 mayúscula, 1 número y 1 carácter especial (@, ., -, etc.)', 'error'); 
                 return; 
             }
 
@@ -2071,6 +2174,7 @@
 
             const nombreCompleto = nombre + ' ' + apellido;
             DB.agregarUsuario(correo, nombreCompleto + ';' + pass + ';' + rol + ';' + negocio);
+            crearInventarioPredeterminado(correo, rol);
             alerta('alerta-registro', '¡Registro Exitoso! Ahora inicie sesión', 'success');
             
             setTimeout(() => mostrarPantalla('pantalla-login'), 2000);
@@ -2965,6 +3069,7 @@
             }
 
             DB.agregarUsuario(correo, `${nombre};${contrasena};${rol};${negocio}`);
+            if (rol !== 'Administrador') crearInventarioPredeterminado(correo, rol);
             alerta('alerta-admin', 'Usuario agregado', 'success');
             this.reset();
             cargarAdminPanel();
