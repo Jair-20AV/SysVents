@@ -2960,10 +2960,6 @@
             const pG = total ? ((Math.abs(gas)/total)*100).toFixed(1) : 0;
             const pU = total ? ((Math.abs(uti)/total)*100).toFixed(1) : 0;
 
-            document.getElementById('ley-ingresos').textContent = `🟢 Ingresos: ${formatearMoneda(ing)} (${pI}%)`;
-            document.getElementById('ley-costos').textContent = `🔴 Costos: ${formatearMoneda(cos)} (${pC}%)`;
-            document.getElementById('ley-gastos').textContent = `🟡 Gastos: ${formatearMoneda(gas)} (${pG}%)`;
-            document.getElementById('ley-utilidad').textContent = `${uti >= 0 ? '🔵' : '🔴'} ${uti >= 0 ? 'Utilidad' : 'Pérdida'}: ${formatearMoneda(uti)} (${pU}%)`;
 
             if (chartInstance) chartInstance.destroy();
             const ctx = document.getElementById('graficoCircular').getContext('2d');
